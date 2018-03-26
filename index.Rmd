@@ -1,0 +1,162 @@
+---
+title: "Machine Learning Predictions"
+author: "Luis A Alaniz Castillo"
+date: "3/25/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(error = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(tidy = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/luisaalanizcastillo/Practical-Machine-Learning")
+options(scipen = 999)
+```
+
+### Packages used.
+
+```{r packages}
+library(dplyr)
+library(Hmisc)
+library(caret)
+library(pgmm)
+library(rpart)
+library(gbm)
+library(e1071)
+library(randomForest)
+library(gplots)
+library(RColorBrewer)
+```
+
+
+### Loading the data.
+
+The root directory was setup using the knitr option root.dir and then the data was downloaded that directory, if not already downlaoded before, and loaded into R using the R command read.csv. The data was then store in a table data frame.
+
+```{r loading}
+if (!file.exists("pml-training.csv") & !file.exists("pml-testing.csv")) {
+        fileurl_train = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+        fileurl_test = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+        download.file(fileurl_train, "pml-training.csv")
+        download.file(fileurl_test, "pml-testing.csv")
+        dateDownloaded <- date()
+}
+
+data_train <- read.csv("pml-training.csv")
+data_test <- read.csv("pml-testing.csv")
+data_train <- tbl_df(data_train)
+data_test <- tbl_df(data_test)
+```
+
+### Partioning the data in a train and a validation set.
+
+The validation set consists of 25 percent of the original training set and the new training set consists 75 percent of the original training set.
+
+```{r partioning}
+data_train <- read.csv("pml-training.csv")
+data_test <- read.csv("pml-testing.csv")
+inTrain <- createDataPartition(data_train$classe, p = 3/4)[[1]]
+data_val <- data_train[ -inTrain,]
+data_train = data_train[inTrain,]
+
+data_train <- tbl_df(data_train)
+data_val <- tbl_df(data_val)
+data_test <- tbl_df(data_test)
+```
+
+
+### Exploring and selecting the data.
+
+Eliminated names and observations numbers as they are irrelevant for prediction. Also eliminated timestamps and windows variables because they are irrelevant in this application of machine learning algorithms since forecasting will not be used. Finally, eliminated average, variance, standard deviation, max, min, amplitude, skewness and kurtosis features since they do not exist for every variables. 
+
+```{r clening and exploring}
+data_train <- select(data_train, -X, -user_name, -raw_timestamp_part_1, -raw_timestamp_part_2, -cvtd_timestamp, -new_window, -num_window) 
+data_val <- select(data_val, -X, -user_name, -raw_timestamp_part_1, -raw_timestamp_part_2, -cvtd_timestamp, -new_window, -num_window) 
+
+drops <- c(grep("^avg",names(data_train), value = TRUE), grep("^var",names(data_train), value = TRUE), 
+           grep("^stddev",names(data_train), value = TRUE), grep("^max",names(data_train), value = TRUE), 
+           grep("^min",names(data_train), value = TRUE), grep("^amplitude",names(data_train), value = TRUE),
+           grep("^skewness",names(data_train), value = TRUE), grep("^kurtosis",names(data_train), value = TRUE))
+
+data_train <-  data_train[ , !(names(data_train) %in% drops)]
+data_val <-  data_val[ , !(names(data_val) %in% drops)]
+data_train
+```
+
+
+Some box plots showing the relationship between the outcome and some of the predictors.
+
+```{r exploratory plots}
+par(mfcol = c(2,2),  oma = c(1, 2.5, 1, 2.5), mar = c(1.8, 2.5, 1.8, 2.5))
+boxplot(roll_belt ~ classe, data = data_train, main = "Roll Belt")
+boxplot(pitch_belt ~ classe, data = data_train, main = "Pitch Belt")
+boxplot(yaw_belt ~ classe, data = data_train, main = "Yaw Belt")
+boxplot(total_accel_belt ~ classe, data = data_train, main = "Total Accel. Belt")
+par(mfrow=c(1,1))
+```
+
+### Training and validating.
+
+- Tree and its precision.
+
+```{r tree}
+tree <- train(classe ~ ., data = data_train, method =  "rpart")
+#par(mfrow = c(1,1), oma = c(4.1, 2.1, 5.1, 2.1), mar = c(0, 0, 6, 0))
+#plot(tree$finalModel, uniform = TRUE, main = "Classification Tree")
+#text(tree$finalModel, use.n = TRUE, all = TRUE, cex = 0.5)
+#par(mfrow=c(1,1))
+
+pred_tree <- predict(tree, data_val)
+conf_tree <- confusionMatrix(pred_tree, data_val$classe)
+
+round(conf_tree$overall,2)
+```
+
+- Tree confusion matrix.
+
+```{r conf_tree}
+palette <- brewer.pal(n = 5, name = "YlGn")
+heatmap.2(conf_tree$table, dendrogram='none', Rowv = FALSE, Colv = FALSE, key = FALSE, col = palette, cellnote = as.matrix(conf_tree$table), trace = "none", notecol = "black", lwid = c(1.5,9.5), lhei = c(2.5,8.5), srtCol = 360, main = "Confusion Matrix Tree")
+par(mfrow=c(1,1))
+```
+
+- Tree bagging and its precision.
+
+```{r tree bag}
+tree_bag <- train(classe ~ ., data = data_train, method =  "treebag")
+pred_tree_bag <- predict(tree_bag, data_val)
+conf_tree_bag <- confusionMatrix(pred_tree_bag, data_val$classe)
+
+round(conf_tree_bag$overall,2)
+```
+
+- Tree bagging confusion matrix.
+
+```{r conf_tree_bag}
+palette <- brewer.pal(n = 5, name = "YlGn")
+heatmap.2(conf_tree_bag $table, dendrogram='none', Rowv = FALSE, Colv = FALSE, key = FALSE, col = palette, cellnote = as.matrix(conf_tree_bag $table), trace = "none", notecol = "black", lwid = c(1.5,9.5), lhei = c(2.5,8.5), srtCol = 360, main = "Confusion Matrix Tree Bagged")
+par(mfrow=c(1,1))
+```
+
+- Random forest and its precision.
+
+```{r random forest}
+forest <- randomForest(classe ~ ., data = data_train, importance =  TRUE)
+pred_forest <- predict(forest, data_val)
+conf_forest <- confusionMatrix(pred_forest, data_val$classe)
+
+round(conf_forest$overall,2)
+```
+
+
+```{r conf_forest}
+palette <- brewer.pal(n = 5, name = "YlGn")
+heatmap.2(conf_forest$table, dendrogram='none', Rowv = FALSE, Colv = FALSE, key = FALSE, col = palette, cellnote = as.matrix(conf_tree$table), trace = "none", notecol = "black", lwid = c(1.5,9.5), lhei = c(2.5,8.5), srtCol = 360, main = "Confusion Matrix Random Forest")
+```
+
+### Conclusion
+
+Random Forest appears to be the most precise method. Boosting was practically infeaseable because of computing time (to many variables and observations for this algorithm to work in a reasonable amount of time).
+
