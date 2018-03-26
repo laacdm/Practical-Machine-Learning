@@ -85,18 +85,6 @@ data_val <-  data_val[ , !(names(data_val) %in% drops)]
 data_train
 ```
 
-
-Some box plots showing the relationship between the outcome and some of the predictors.
-
-```{r exploratory plots}
-par(mfcol = c(2,2),  oma = c(1, 2.5, 1, 2.5), mar = c(1.8, 2.5, 1.8, 2.5))
-boxplot(roll_belt ~ classe, data = data_train, main = "Roll Belt")
-boxplot(pitch_belt ~ classe, data = data_train, main = "Pitch Belt")
-boxplot(yaw_belt ~ classe, data = data_train, main = "Yaw Belt")
-boxplot(total_accel_belt ~ classe, data = data_train, main = "Total Accel. Belt")
-par(mfrow=c(1,1))
-```
-
 ### Training and validating.
 
 - Tree and its precision.
